@@ -92,7 +92,20 @@ About MQTT operation
 2) modem.mqttStatus();
     Get the status of MQTT server (like the connection).
 
-3) 
+3) modem.mqttWrite(String &message, int option);
+    String &message: The data you want to transmit;
+    int option: the configuration you want (like the server ip, client ID, username and password, etc.).
+
+4) modem.mqttConnect();
+    Try to connect the MQTT server according to the configuration from "modem.startMQTT(int option);".
+
+5) modem.mqttSub(String &message);
+    According to the configuration to subscribe the specified topic's message.
+
+6) modem.mqttUnsub();
+    Cancel the current subscription.
+
+7) 
 
 
 
