@@ -935,6 +935,37 @@ void loop() {
 
 
 
+    // Serial.print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~Test-Remote Control by MQTT~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
+    if (intervalCfg && (millis()-timerLastCfg) > intervalCfg){
+          // MQTT publish data and receive commands
+          Serial.println("Try to subscribe mqtt data\n");
+          modem.startMQTT(0); 
+          modem.mqttConnect(); 
+          returnValue = modem.mqttRead(returnString, 1);
+          delay(10000);
+          modem.mqttDisconnect(); 
+          // String command = "intervalData=1000 ;intervalMQTT= 200 ;intervalCfg=3;intervalLog=50;intervalBackup=60;";
+          
+          // // Parse the command
+          parseCommand(returnString);
+          
+          // // Output the results
+          Serial.print("intervalData = ");
+          Serial.println(intervalData);
+          Serial.print("intervalUpdate = ");
+          Serial.println(intervalUpdate);
+          Serial.print("intervalCfg = ");
+          Serial.println(intervalCfg);
+          Serial.print("intervalLog = ");
+          Serial.println(intervalLog);
+          Serial.print("intervalBackup = ");
+          Serial.println(intervalBackup);
+    }
+    // end Test-Remote Control by MQTT
+
+
+
+
 
   //   if ((millis()-timerLastRead) > intervalData){
 
@@ -1259,4 +1290,64 @@ int writeStatus() {
 
 String settingsString() {
   return "intervalData=" + String(intervalData) + ";intervalFTP=" + String(intervalUpdate) + ";intervalCfg=" + String(intervalCfg) + ";intervalLog=" + String(intervalLog) + ";intervalBackup=" + String(intervalBackup);
+}
+
+/*
+ * Function to parse the configuration command
+ */
+
+void parseCommand(String command) {
+    // Map keys to variable addresses
+    struct Config {
+        const char* key;
+        int* variable;
+    };
+    
+    extern int intervalData;     // Ensure these variables are declared elsewhere
+    extern int intervalUpdate;
+    extern int intervalCfg;
+    extern int intervalLog;
+    extern int intervalBackup;
+
+    Config configMap[] = {
+        {"intervalData", &intervalData},
+        {"intervalUpdate", &intervalUpdate},
+        {"intervalCfg", &intervalCfg},
+        {"intervalLog", &intervalLog},
+        {"intervalBackup", &intervalBackup},
+    };
+    
+    const int configMapSize = sizeof(configMap) / sizeof(Config);
+
+    // Split the command by semicolons
+    int start = 0;
+    while (start < command.length()) {
+        int end = command.indexOf(';', start);
+        if (end == -1) {
+            end = command.length();
+        }
+        
+        String item = command.substring(start, end);
+        start = end + 1;
+
+        // Split each item by the equals sign
+        int pos = item.indexOf('=');
+        if (pos != -1) {
+            String key = item.substring(0, pos);
+            key.trim(); // Correct usage of trim
+
+            String valueStr = item.substring(pos + 1);
+            valueStr.trim(); // Correct usage of trim
+
+            int value = valueStr.toInt();
+
+            // Set the corresponding variable
+            for (int i = 0; i < configMapSize; i++) {
+                if (key == configMap[i].key) {
+                    *configMap[i].variable = value;
+                    break;
+                }
+            }
+        }
+    }
 }
