@@ -10,4 +10,6 @@ Step:
 	#define AT_MQT_SUB          "AT+SMSUB=\"aimnet/commands1\",1"
 	2. Add function -- parseCommand(String command) in the FeatherSenseairWiFiServer.ino (the end of the file)
 	3. Read MQTT commands and update parameters (see the codes).
-        
+
+Notice: the publish data in server-side should follow the following form:
+"intervalData=xxx;intervalUpdate=xxx;intervalCfg=xxx;intervalLog=xxx;intervalBackup=xxx;"
