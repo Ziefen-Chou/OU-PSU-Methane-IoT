@@ -993,7 +993,7 @@ String SimModem::ftpFile(){
  *          2 - error, message empty
  *****************************************************************************/
 int SimModem::mqttSub(String &message){
-  message = readWaitResponse(AT_MQT_SUB,5000,"SMSUB:");
+  message = readWaitResponse(AT_MQT_SUB, 10000,"SMSUB:");
   if (message.indexOf("ERROR") < 0){
     statusMQTT = MODEM_STATUS_MQTT_SUB;
     return 0;
