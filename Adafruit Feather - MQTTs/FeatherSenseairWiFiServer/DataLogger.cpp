@@ -18,6 +18,8 @@
 
 */
 #include "DataLogger.h"
+#include <AES.h>
+#include <GCM.h>
 
 DataLogger::DataLogger() {
 }
@@ -422,7 +424,7 @@ int DataLogger::fileSize(int option) {
 
 // PSU-added code
 String DataLogger::fileReadByLine(int option, int startLine, int endLine) {
-  if (!status) {
+  if (!status) { //!status
     String temp;
     if (option == FILE_TYPE_DATA) {
       temp = fileName;
@@ -439,6 +441,37 @@ String DataLogger::fileReadByLine(int option, int startLine, int endLine) {
     } else if (option == FILE_TYPE_KEY) {
       temp = KEY_FILE_NAME;
     }
+    File dataFile = SD.open(temp);
+    if (dataFile) {
+      int currentLine = 0;
+      String result = "";  // 初始化结果字符串
+      while (dataFile.available()) {
+        String line = dataFile.readStringUntil('\n');
+        if (currentLine >= startLine && currentLine <= endLine) {
+          result += line;  // 添加行到结果
+          if (!line.endsWith("\n")) {
+            result += '\n';  // 确保输出是完整的一行
+          }
+        }
+        if (currentLine > endLine) {
+          break;  // 如果已经读到endLine，结束循环
+        }
+        currentLine++;
+      }
+      dataFile.close();
+      return result;  // 返回收集的行
+    } else {
+      return "Failed to open file.";  // 返回打开文件失败的信息
+    }
+  } else {
+    return "Error: File is already open, cannot proceed.";  // 文件已经打开的错误信息
+  }
+}
+
+
+String DataLogger::SpefileReadByLine(String FileName, int startLine, int endLine) {
+  if (!status) {
+    String temp = FileName;
     File dataFile = SD.open(temp);
     if (dataFile) {
       int currentLine = 1;
@@ -466,6 +499,8 @@ String DataLogger::fileReadByLine(int option, int startLine, int endLine) {
   }
 }
 
+
+
 int DataLogger::fileRemove_Specified(int option, String FILE) {
   // open the file. note that only one file can be open at a time,
   // so you have to close this one before opening another.
@@ -481,4 +516,45 @@ int DataLogger::fileRemove_Specified(int option, String FILE) {
     }
   }
   return -1;
+}
+
+/*
+ * using application-layer encryption, given message
+ */
+String DataLogger::AppEncrypt(String OriginMessage) {
+  // config the encryption
+  uint8_t key[16] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F};
+  uint8_t iv[12] = {0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B};
+  // Define a structure for the encrypted data and its length
+  String pub_content;
+  GCM<AES128> gcm;
+  gcm.setKey(key, sizeof(key));
+  gcm.setIV(iv, sizeof(iv));
+  // Buffer for ciphertext
+  String TransData = OriginMessage;
+  int dataSize = TransData.length() + 1;
+  uint8_t *plaintext = new uint8_t[dataSize];
+  for (int s = 0; s < dataSize - 1; s++) {  // Exclude the null terminator in the loop
+    plaintext[s] = (uint8_t)TransData[s];  // Cast each character to uint8_t
+  }
+  plaintext[dataSize - 1] = 0;  // Null terminator, if needed
+  TransData.getBytes(plaintext, dataSize);  // Ensures null-termination
+  // Proceed with encryption, ensuring not to include the null terminator
+  uint8_t ciphertext[1024];
+  gcm.encrypt(ciphertext, plaintext, dataSize-1);
+  // gcm.encrypt(ciphertext, plaintext, sizeof(plaintext) - 1); // Subtract 1 to exclude the null terminator from encryption
+  // Assuming `encrypt` modifies a global or passed variable for length,
+  // or you know the length from the size of `plaintext`
+  size_t len = dataSize - 1 + 16;
+ 
+  gcm.computeTag(ciphertext + dataSize -1, 16);  // Append the tag
+  // Convert binary data to a hexadecimal string for transmission
+  char hexString[2048];  // Make sure this is large enough
+  for (size_t j = 0; j < len; j++) {
+    sprintf(hexString + (j * 2), "%02x", ciphertext[j]);
+  }
+  // Serial.print(hexString);
+  // Serial.print("transmit to mqtt");
+  pub_content = String(hexString);
+  return pub_content;
 }

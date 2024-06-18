@@ -68,13 +68,17 @@
 #define MODE_DATA MODE_CFG_FTP
 #define MODE_CTRL MODE_CFG_MQTT
 
+#define MAX_LINE_LENGTH 1024
+#define RATIO_FLOW_PUMP 0.5
+#define INTERVAL_PUMP 5000
 
 String dataString = "test_April-2024_#";
 int returnValue = 0;  // Generic integer for catching return values
 String returnString = "";
 
-int intervalData = 1000;  // Read data from sensor and GPS every 30 seconds
+int intervalData = 5000;  // Read data from sensor and GPS every 5 seconds
 int timerLastRead = 0;    // Millisecond timer value for last data read
+int numCollect = 0;
 
 int intervalFile = DEVICE_ENABLED;  // Status variable to enable/disable code options
 
@@ -82,7 +86,7 @@ int intervalUpdate = 0;     // Write most recent data to FTP server every 3 minu
 int timerLastDataFile = 0;  // Millisecond timer value for last data upload
 int countLastDataFile = 0;
 
-int intervalCfg = 0;  // Read timing configuration by FTP every 3 minutes
+int intervalCfg = 5000;  // Read timing configuration by FTP every 3 minutes
 int timerLastCfg = 0;
 
 int intervalBackup = 0;  // Backup the data file every 15 minutes
@@ -123,6 +127,13 @@ char serialBuffer[SERIAL_BUFFER] = "";
 // PSU_add
 unsigned long previousMillis = 0;    // Stores the last time the calculation was made
 const long interval_sleep = 300000;  // Interval at which to perform the calculation (5 minutes = 300000 milliseconds)
+int currentLine = 0;
+String currentFile;
+int MaxLineNum = 14400;                // maximum line number of one file, almost one day
+//int MaxLineNum = 120; 
+int init_line = 1;
+int end_line = 10;
+// bool newfile = false;
 
 long count = 0;
 
@@ -701,79 +712,92 @@ void loop() {
  * 5 - H2O concentration
  */
 
-  //  Serial.print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~new test~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
-
-  //   // 0. check modem's status
-  //   // statusModem = modem.checkStatus();  // if statusModem == 0: it is on
-  //   statusModem = modem.init();  // if statusModem == 0: it is on
-  //   Serial.print("statusModem: ");
-  //   Serial.print(statusModem);
-
-  //   int restart_time = 0;
-  //   while(statusModem != 0){       //  if not on, restart it
-  //     Serial.print("not start, try to start --" + String(restart_time)+"\n");
-  //     restart_time++;
-  //     statusModem = modem.init();
-  //     delay(3000);
-  //   }
-
-  //   Serial.print(modem.enableIP());
-  //   Serial.print("Simcom 7070G IP Address = \n");
-  //   returnValue = modem.readIP(returnString);
-  //   if(!returnValue){
-  //     Serial.println(returnString);
-  //   }
-  //   else{
-  //     Serial.println("No Connection");
-  //   }
-  //   // Serial.print("modem starts up");
 
 
-  //   // 1. check mqtt status
-  //       modem.mqttStatus();
-  //       modem.startMQTT(3);
-  //       modem.mqttConnect();
-  //       delay(1000);
+    // // Serial.print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~Test-Remote Control by MQTT~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
+    if (intervalCfg && (millis()-timerLastCfg) > intervalCfg){
+          // MQTT publish data and receive commands
+          Serial.println("Try to subscribe mqtt data\n");
+          modem.startMQTT(0); 
+          modem.mqttConnect(); 
+          returnValue = modem.mqttRead(returnString, 1);
+          delay(10000);
+          modem.mqttDisconnect(); 
+          // String command = "intervalData=1000 ;intervalMQTT= 200 ;intervalCfg=3;intervalLog=50;intervalBackup=60;";
+          if (returnValue==0){
+            // change the configuration file
+            replaceConfig(returnString);
+            
+          }
+          parseCommand(returnString);
+          // // Output the results
+          Serial.print("intervalData = ");
+          Serial.println(intervalData);
+          Serial.print("intervalUpdate = ");
+          Serial.println(intervalUpdate);
+          Serial.print("intervalCfg = ");
+          Serial.println(intervalCfg);
+          Serial.print("intervalLog = ");
+          Serial.println(intervalLog);
+          Serial.print("intervalBackup = ");
+          Serial.println(intervalBackup);
+          Serial.print("powerFan = ");
+          Serial.println(powerFan);
+          Serial.print("powerPump = ");
+          Serial.println(powerPump);
+    }
+    // end Test-Remote Control by MQTT
+    if ((millis()-timerLastRead) > intervalData){
+      numCollect = numCollect + 1;
+      timerLastRead = millis();
+      int option = (intervalUpdate != 0);
+      dataString = ',' + String(millis()/1000) + ',';
+      int test = k96.readCSVString(dataString);                              // Sensor data
+      if (statusGPS == DEVICE_ENABLED){
+        dataString += gpsSerial.readResponse();
+      }
+      if (statusModem == DEVICE_ENABLED && logModemTime){
+        modem.readClock(0, returnString);
+        dataString.concat(returnString);
+      }
+      if (statusModem == DEVICE_ENABLED && logModemPower){
+        dataString += "," + modem.readSignal();
+      }
 
-  //   // 2. publish data
-  //       // Serial.print("try to send message");
-  //       // modem.mqttPub("Hello, I am MQTT",1);
-  //       dataString = "test_April-2024_#" + String(count);
-  //       // returnValue = modem.mqttWrite(dataString, 1);
-
-  //       for(int i=0; i<10;i++){
-  //         String pub_content = dataString+ "_";
-  //         pub_content = pub_content + String(i);
-  //         returnValue = modem.mqttWrite(pub_content, 1);
-  //         delay(5000);
-  //       }
-  //       count++;
-
-  //       Serial.print("rest for a while");
-  //       modem.powerToggle();
-
-  //       delay(300000);  // 20s   here we want to rest for 5min  5*60 * 1000
-
-
-  Serial.print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~Combine-SD-Round-Test~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
-    // create new file
-        logger.fileNewName();
-
-    // 2. collect data, put into SD -- 5 minutes
-        Serial.print("Save data to SD card");
-        // modem.mqttPub("Hello, I am MQTT",1);
-        dataString = "test_April-2024_#" + String(count);
-        // returnValue = modem.mqttWrite(dataString, 1);
-        // sample/5s, 5 mintues, 12*5=60 samples
-        for(int i=0; i<60;i++){
-          String pub_content = dataString+ "_";
-          pub_content = pub_content + String(i);
-          Serial.println(logger.fileAddCSV(pub_content, 0));
-          delay(5000);
+  //SDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSD
+  // Store the data on local SD card (can be disabled)
+  // Check file size for disk management, change filename if necessary
+  // Display external error message using opCode
+      if(intervalFile == DEVICE_ENABLED){
+        statusSD = logger.fileAddCSV(dataString, 0);
+        fileSizeLimit = (logger.fileCheckSize() > FILE_MAX_SIZE);
+        dataSizeLimit = ((logger.fileCheckSize() - lastFTPByteBackup) > DATA_MAX_SIZE) || fileSizeLimit;
+        if (statusSD > 0){
+          control.blinkCode(3);
         }
-        count++;
-    // start the modem and network
-        Serial.println(modem.enableIP());
+        else if (test != 0){
+          control.blinkCode(2);
+        }
+        else {
+          control.blinkCode(1);
+        }
+      }
+      else{
+        if (test != 0){
+          control.blinkCode(1);
+        }
+        else if (statusSD > 0){
+          control.blinkCode(2);
+        }
+      }
+
+
+    }
+
+    // send data to mqtt server
+    if (numCollect==60){
+      numCollect = 0;
+      Serial.println(modem.enableIP());
         statusModem = modem.init();
         int restart_time = 0;
         while(statusModem != 0){       //  if not on, restart it
@@ -797,9 +821,11 @@ void loop() {
         modem.startMQTT(3);
         modem.mqttConnect();
         delay(1000);
+        if (end_line == MaxLineNum){
+          init_line = 1;
+          end_line = 10;
+        }
         Serial.print("Start to transmit data");
-        int init_line = 1;
-        int end_line = 10;
         for(int i=0; i<6;i++){
           String TransData = logger.fileReadByLine(FILE_TYPE_DATA, init_line, end_line);
           returnValue = modem.mqttWrite(TransData, 1);
@@ -807,361 +833,14 @@ void loop() {
           end_line += 10;
           delay(9000);
         }
+        if (end_line == MaxLineNum){
+          logger.fileNewName();
+        }
+        currentFile;
         // modem.powerToggle();
         //  delete now file
         Serial.println(modem.disableIP());
-        logger.fileRemove(1);
-
-
-  // Serial.print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~Combine-SD-Round-AppEncrypt-Test~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
-  // // create new file
-  // logger.fileNewName();
-
-  // // 2. collect data, put into SD -- 5 minutes
-  // Serial.print("Save data to SD card");
-  // // modem.mqttPub("Hello, I am MQTT",1);
-  // dataString = "test_April-2024_#" + String(count);
-  // // returnValue = modem.mqttWrite(dataString, 1);
-  // // sample/5s, 5 mintues, 12*5=60 samples
-  // for (int i = 0; i < 20; i++) {
-  //   String pub_content = dataString + "_";
-  //   pub_content = pub_content + String(i);
-  //   Serial.println(logger.fileAddCSV(pub_content, 0));
-  //   delay(2000);
-  // }
-  // count++;
-
-  // statusModem = modem.init();
-  // int restart_time = 0;
-  // while (statusModem != 0) {  //  if not on, restart it
-  //   Serial.print("not start, try to start --" + String(restart_time) + "\n");
-  //   restart_time++;
-  //   statusModem = modem.init();
-  //   delay(5000);
-  // }
-  // Serial.print(modem.enableIP());
-  // Serial.print("Simcom 7070G IP Address = \n");
-  // returnValue = modem.readIP(returnString);
-  // if (!returnValue) {
-  //   Serial.println(returnString);
-  // } else {
-  //   Serial.println("No Connection");
-  // }
-  // // Serial.print("modem starts up");
-  // // config the encryption
-  // uint8_t key[16] = { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F };
-  // uint8_t iv[12] = { 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B };
-  // // Define a structure for the encrypted data and its length
-  // String pub_content;
-  // GCM<AES128> gcm;
-  // gcm.setKey(key, sizeof(key));
-  // gcm.setIV(iv, sizeof(iv));
-  // // Buffer for ciphertext
-  // // 1. check mqtt status
-  // modem.mqttStatus();
-  // modem.startMQTT(4);
-  // modem.mqttConnect();
-  // delay(1000);
-  // Serial.print("Start to transmit data");
-  // int init_line = 1;
-  // int end_line = 10;
-  // for (int i = 0; i < 6; i++) {
-  //   String TransData = logger.fileReadByLine(FILE_TYPE_DATA, init_line, end_line);
-  //   int dataSize = TransData.length();
-  //   uint8_t *plaintext = new uint8_t[dataSize + 1];
-  //   TransData.getBytes(plaintext, dataSize + 1);  // Ensures null-termination
-  //   // Proceed with encryption, ensuring not to include the null terminator
-  //   uint8_t ciphertext[64];
-  //   // gcm.encrypt(ciphertext, plaintext, dataSize);
-  //   gcm.encrypt(ciphertext, plaintext, sizeof(plaintext) - 1); // Subtract 1 to exclude the null terminator from encryption
-  //   // Assuming `encrypt` modifies a global or passed variable for length,
-  //   // or you know the length from the size of `plaintext`
-  //   size_t len = sizeof(plaintext) - 1 + 16;
-
-  //   gcm.computeTag(ciphertext + sizeof(plaintext) - 1, 16);  // Append the tag
-  //   // Convert binary data to a hexadecimal string for transmission
-  //   char hexString[128];  // Make sure this is large enough
-  //   for (size_t j = 0; j < len; j++) {
-  //     sprintf(hexString + (j * 2), "%02x", ciphertext[j]);
-  //   }
-  //   Serial.print(hexString);
-  //   Serial.print("transmit to mqtt");
-  //   pub_content = String(hexString);
-  //   returnValue = modem.mqttWrite(pub_content, 1);
-  //   init_line += 10;
-  //   end_line += 10;
-  //   delay(9000);
-  // }
-  // modem.powerToggle();
-  // //  delete now file
-  // logger.fileRemove(1);
-
-  // Serial.print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~Test-Encryption-Package~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
-  // statusModem = modem.init();
-  // modem.mqttStatus();
-  // modem.startMQTT(4);
-  // modem.mqttConnect();
-  // delay(5000);
-  // uint8_t key[16] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F};
-  // uint8_t iv[12] = {0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B};
-  // // Define a structure for the encrypted data and its length
-  // String pub_content;
-  // GCM<AES128> gcm;
-  // gcm.setKey(key, sizeof(key));
-  // gcm.setIV(iv, sizeof(iv));
-  // // Buffer for ciphertext
-  // uint8_t plaintext[] = "Test-Application-Encryption";
-  // uint8_t ciphertext[64];
-
-  // gcm.encrypt(ciphertext, plaintext, sizeof(plaintext) - 1); // Subtract 1 to exclude the null terminator from encryption
-
-  // // Assuming `encrypt` modifies a global or passed variable for length,
-  // // or you know the length from the size of `plaintext`
-  // size_t len = sizeof(plaintext) - 1 + 16;
-
-  // gcm.computeTag(ciphertext + sizeof(plaintext) - 1, 16); // Append the tag
-
-  // // Convert binary data to a hexadecimal string for transmission
-  // char hexString[128]; // Make sure this is large enough
-  // for (size_t i = 0; i < len; i++) {
-  //   sprintf(hexString + (i * 2), "%02x", ciphertext[i]);
-  // }
-
-  // Serial.print(hexString);
-  // pub_content = String(hexString);
-  // returnValue = modem.mqttWrite(pub_content, 1);
-  // delay(5000);
-  // modem.mqttDisconnect();
-
-
-
-    // Serial.print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~Test-Remote Control by MQTT~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
-    if (intervalCfg && (millis()-timerLastCfg) > intervalCfg){
-          // MQTT publish data and receive commands
-          Serial.println("Try to subscribe mqtt data\n");
-          modem.startMQTT(0); 
-          modem.mqttConnect(); 
-          returnValue = modem.mqttRead(returnString, 1);
-          delay(10000);
-          modem.mqttDisconnect(); 
-          // String command = "intervalData=1000 ;intervalMQTT= 200 ;intervalCfg=3;intervalLog=50;intervalBackup=60;";
-          
-          // // Parse the command
-          parseCommand(returnString);
-          
-          // // Output the results
-          Serial.print("intervalData = ");
-          Serial.println(intervalData);
-          Serial.print("intervalUpdate = ");
-          Serial.println(intervalUpdate);
-          Serial.print("intervalCfg = ");
-          Serial.println(intervalCfg);
-          Serial.print("intervalLog = ");
-          Serial.println(intervalLog);
-          Serial.print("intervalBackup = ");
-          Serial.println(intervalBackup);
     }
-    // end Test-Remote Control by MQTT
-
-
-
-
-
-  //   if ((millis()-timerLastRead) > intervalData){
-
-  //     timerLastRead = millis();
-  //     int option = (intervalUpdate != 0);
-  //     dataString = ',' + String(millis()/1000) + ',';
-  //     int test = k96.readCSVString(dataString);                              // Sensor data
-  //     if (statusGPS == DEVICE_ENABLED){
-  //       dataString += gpsSerial.readResponse();
-  //     }
-  //     if (statusModem == DEVICE_ENABLED && logModemTime){
-  //       modem.readClock(0, returnString);
-  //       dataString.concat(returnString);
-  //     }
-  //     if (statusModem == DEVICE_ENABLED && logModemPower){
-  //       dataString += "," + modem.readSignal();
-  //     }
-
-  // //SDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSDSD
-  // // Store the data on local SD card (can be disabled)
-  // // Check file size for disk management, change filename if necessary
-  // // Display external error message using opCode
-  //     if(intervalFile == DEVICE_ENABLED){
-  //       statusSD = logger.fileAddCSV(dataString, 0);
-  //       fileSizeLimit = (logger.fileCheckSize() > FILE_MAX_SIZE);
-  //       dataSizeLimit = ((logger.fileCheckSize() - lastFTPByteBackup) > DATA_MAX_SIZE) || fileSizeLimit;
-  //       if (statusSD > 0){
-  //         control.blinkCode(3);
-  //       }
-  //       else if (test != 0){
-  //         control.blinkCode(2);
-  //       }
-  //       else {
-  //         control.blinkCode(1);
-  //       }
-  //     }
-  //     else{
-  //       if (test != 0){
-  //         control.blinkCode(1);
-  //       }
-  //       else if (statusSD > 0){
-  //         control.blinkCode(2);
-  //       }
-  //     }
-
-  //     // MQTT
-  //     //returnValue = modem.mqttRead(returnString, 1);
-  //     returnValue = modem.mqttWrite(dataString, 1);
-
-  //     //FTPFTPFTPFTPFTPFTPFTPFTPFTPFTPFTPFTPFTPFTPFTPFTPFTPFTPFTPFTPFTPFTPFTPFTPFTP
-  //     // Update the data file on the FTP server
-  //     if (intervalUpdate && (millis()-timerLastDataFile) > intervalUpdate){
-  //       if (statusSD == 0){
-  //         File tempFile = logger.fileOpen(1);
-  //         returnValue = modem.ftpPut(tempFile,1);
-  //         tempFile.close();
-  //       }
-  //       else {
-  //         returnValue = modem.ftpPut(logger.fileRead(FILE_TYPE_BACKUP),FILE_TYPE_DATA);
-  //       }
-  //       if (!returnValue){
-  //         logger.fileAddCSV((modem.readClock(0)+": File upload (bytes) = " + String(logger.fileSize(FILE_TYPE_BACKUP))),FILE_TYPE_LOG);
-  //         logger.fileRemove(1);
-  //         timerLastDataFile = millis();
-  //         statusFTP = 0;
-  //       }
-  //       // Failed FTP, increment the consecutive failure counter
-  //       else{
-  //         statusFTP += 1;
-  //         logger.fileAddCSV((modem.readClock(0)+": File UPLOAD ERROR data upload"),2);
-  //       }
-
-  //     }
-
-  //       // LOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOGLOG
-  //       // Update the system log, append only the bytes since the last successful FTP transfer
-  //       else if (intervalLog && (millis()-timerLastLog) > intervalLog){
-  //         Serial.println("Log File Upload Started");
-  //         int fileSize = 0;
-
-  //         if (statusSD == 0){                           // SD card present, upload file
-  //           File tempFile = logger.fileOpen(FILE_TYPE_LOG);
-  //           tempFile.seek(lastFTPByteLog);
-  //           returnValue = modem.ftpPut(tempFile,FILE_TYPE_LOG);
-  //           fileSize = tempFile.size();
-  //           tempFile.close();
-  //         }
-  //         else{                                         // SD card virtual, upload string
-  //           returnValue = modem.ftpPut(logger.fileRead(FILE_TYPE_LOG),FILE_TYPE_LOG);
-  //         }
-  //         // Successful FTP, record in log, set number bytes, reset timer
-  //         if (!returnValue){
-  //           Serial.println("Log File Upload Completed");
-  //           logger.fileAddCSV((modem.readClock(0)+": Log upload (bytes) = " + String(logger.fileSize(FILE_TYPE_LOG))),FILE_TYPE_LOG);
-  //           timerLastLog = millis();
-  //           statusFTP = 0;
-  //           lastFTPByteLog = fileSize;
-  //         }
-  //         else{
-  //           Serial.println("Log File Upload Failed");
-  //           logger.fileAddCSV((modem.readClock(0)+": Log file upload failed"),2);
-  //           statusFTP += 1;
-  //         }
-
-  //       }
-  //       //CONFIGCONFIGCONFIGCONFIGCONFIGCONFIGCONFIGCONFIGCONFIGCONFIGCONFIGCONFIGCONFIG
-  //       // Not updating the data file
-  //       else if (intervalCfg && (millis()-timerLastCfg) > intervalCfg){
-  //         Serial.println("Configuration File Download Started");
-  //         String json;
-  //         if (MODE_CTRL == MODE_CFG_FTP){
-  //           returnValue = modem.ftpGet(json);
-  //         }
-  //         else {
-  //           returnValue = modem.mqttRead(json, 1);
-  //         }
-  //         // Server connection test, success => 0
-  //         if (returnValue == 0){
-  //           returnValue = updateConfig(json);
-  //           if (returnValue < -1){
-  //             Serial.println("Configuration File Download Failed");
-  //             logger.fileAddCSV((modem.readClock(0)+": Invalid settings"),2);
-  //             timerLastCfg = millis();
-  //             statusFTP += 1;
-  //           }
-  //           else if (returnValue == -1){
-  //             Serial.println("Configuration File Download Invalid");
-  //             logger.fileAddCSV((modem.readClock(0)+": Config Download: Invalid file"),2);
-  //             timerLastCfg = millis();
-  //           }
-  //           else if (returnValue >0){
-  //             Serial.println("Configuration File Download Completed");
-  //             logger.fileAddCSV((modem.readClock(0)+": Settings Updated = " + settingsString()),2);
-  //             timerLastCfg = millis();
-  //             statusFTP = 0;
-  //           }
-  //           else{
-  //             statusFTP = 0;
-  //             timerLastCfg = millis();
-  //           }
-  //         }
-  //         // Server connection test, failure => -1
-  //         else{
-  //           Serial.println("Configuration File Download Failed");
-  //           logger.fileAddCSV((modem.readClock(0)+": Configuration update failed"),2);
-  //           timerLastCfg = millis();
-  //           statusFTP += 1;
-  //         }
-  //       }
-  //       //BACKUPBACKUPBACKUPBACKUPBACKUPBACKUPBACKUPBACKUPBACKUPBACKUPBACKUPBACKUPBACKUP
-  //       // Upload the dated CSV file
-  //       else if (((intervalBackup && (millis()-LastFileUpload) > intervalBackup)) || dataSizeLimit){
-
-  //         File tempFile = logger.fileOpen(FILE_TYPE_DATA);
-  //         tempFile.seek(lastFTPByteBackup);
-  //         returnValue = modem.ftpPut(tempFile,FILE_TYPE_DATA);
-
-  //         // Check if file was uploaded correctly
-  //         if (!returnValue){
-  //           logger.fileAddCSV((modem.readClock(0)+": Backup file updated"),2);
-  //           LastFileUpload = millis();
-  //           statusFTP = 0;
-  //           lastFTPByteBackup = tempFile.size();
-  //           if (fileSizeLimit){
-  //             logger.fileNewName();
-  //             logger.fileAddCSV((modem.readClock(0)+": File size limit. New file"),2);
-  //             lastFTPByteBackup = 0;
-  //           }
-  //           countLastDataFile++;
-  //           writeStatus();
-  //         }
-  //         // File was not updated, do not increment counter but create new file
-  //         else {
-  //           logger.fileAddCSV((modem.readClock(0)+": File backup failed"),2);
-  //           statusFTP += 1;
-  //         }
-
-  //         tempFile.close();
-  //       }
-  //       //ERRORERRORERRORERRORERRORERRORERRORERRORERRORERRORERRORERRORERRORERRORERRORERROR
-  //       // After 5 consecutive failures reset the power to the modem
-  //       if (statusFTP >= 5){
-  //         logger.fileAddCSV((modem.readClock(0)+": FTP ERRORS, Modem reset"),2);
-  //         Serial.println("Modem reset");
-  //         modem.disableIP();
-  //         delay(1000);
-  //         statusFTP = 0;
-  //         modem.powerToggle();
-  //       }
-  //       //POWERPOWERPOWERPOWERPOWERPOWERPOWERPOWERPOWERPOWERPOWERPOWERPOWERPOWERPOWERPOWER
-  //       // If sufficient delay until next modem action, disable network connection
-  //       //if (powerSave && intervalUpdate >= 45000){
-  //       if (powerSave && intervalUpdate >= 45000){
-  //         modem.disableIP();
-  //       }
-  //   }
 }
 
 /* *********************************************************************************************** 
@@ -1295,12 +974,63 @@ String settingsString() {
 /*
  * Function to parse the configuration command
  */
+void readConfig() {
+    // Open the file in write mode to replace its contents
+    FILE *file = fopen("status.txt", "r");
+    if (file == NULL) {
+        perror("Error opening file");
+        return;
+    }
+    char line[MAX_LINE_LENGTH];
 
+    if (fgets(line, MAX_LINE_LENGTH, file) != NULL) {
+    char *token = strtok(line, ";");
+    while (token != NULL) {
+        char key[64];
+        int value;
+        if (sscanf(token, "%[^=]=%d", key, &value) == 2) {
+            if (strcmp(key, "intervalData") == 0) {
+                intervalData = value;
+            } else if (strcmp(key, "intervalUpdate") == 0) {
+                intervalUpdate = value;
+            } else if (strcmp(key, "intervalCfg") == 0) {
+                intervalCfg = value;
+            } else if (strcmp(key, "intervalLog") == 0) {
+                intervalLog = value;
+            } else if (strcmp(key, "intervalBackup") == 0) {
+                intervalBackup = value;
+            }else if (strcmp(key, "intervalBackup") == 0) {
+                intervalBackup = value;
+            }
+        }
+        token = strtok(NULL, ";");
+      }
+    }
+
+  
+    // Close the file
+    fclose(file);
+}
+void replaceConfig(String &newContent) {
+    // Open the file in write mode to replace its contents
+    FILE *file = fopen("config.txt", "w");
+    if (file == NULL) {
+        perror("Error opening file");
+        return;
+    }
+
+    // Write the new content to the file
+    fprintf(file, "%s", newContent.c_str());
+
+    // Close the file
+    fclose(file);
+}
 void parseCommand(String command) {
     // Map keys to variable addresses
     struct Config {
         const char* key;
-        int* variable;
+        void* variable;
+        bool isBool; // Indicate whether the variable is a boolean
     };
     
     extern int intervalData;     // Ensure these variables are declared elsewhere
@@ -1308,13 +1038,17 @@ void parseCommand(String command) {
     extern int intervalCfg;
     extern int intervalLog;
     extern int intervalBackup;
+    extern bool powerPump;
+    extern bool powerFan;
 
     Config configMap[] = {
-        {"intervalData", &intervalData},
-        {"intervalUpdate", &intervalUpdate},
-        {"intervalCfg", &intervalCfg},
-        {"intervalLog", &intervalLog},
-        {"intervalBackup", &intervalBackup},
+        {"intervalData", &intervalData, false},
+        {"intervalUpdate", &intervalUpdate, false},
+        {"intervalCfg", &intervalCfg, false},
+        {"intervalLog", &intervalLog, false},
+        {"intervalBackup", &intervalBackup, false},
+        {"powerFan", &powerFan, true},
+        {"powerPump", &powerPump, true},
     };
     
     const int configMapSize = sizeof(configMap) / sizeof(Config);
@@ -1339,15 +1073,40 @@ void parseCommand(String command) {
             String valueStr = item.substring(pos + 1);
             valueStr.trim(); // Correct usage of trim
 
-            int value = valueStr.toInt();
-
-            // Set the corresponding variable
             for (int i = 0; i < configMapSize; i++) {
                 if (key == configMap[i].key) {
-                    *configMap[i].variable = value;
+                    if (configMap[i].isBool) {
+                        bool value = (valueStr == "true" || valueStr == "1");
+                        *((bool*)configMap[i].variable) = value;
+                        
+                        // Control power based on the value
+                        if (key == "powerFan") {
+                            if (value) {
+                              Serial.println(value);
+                              control.enablePower(0);
+                            } else {
+                              Serial.println(value);
+                              control.disablePower(0);
+                            }
+                        } else if (key == "powerPump") {
+                          
+                            if (value) {
+                              Serial.println(value);
+                              control.enablePower(1);
+                            } else {
+                              Serial.println(value);
+                              control.disablePower(1);
+                            }
+                        }
+                    } else {
+                        int value = valueStr.toInt();
+                        *((int*)configMap[i].variable) = value;
+                    }
                     break;
                 }
             }
         }
     }
 }
+
+

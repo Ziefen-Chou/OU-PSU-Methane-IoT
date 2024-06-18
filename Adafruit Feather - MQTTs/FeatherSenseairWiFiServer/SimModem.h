@@ -23,7 +23,7 @@
 #define modemRX                   21
 #define modemTX                   20
 
-#define BOARD                     0                   // Version 0 = Waveshare, Version 1 = And-Global
+#define BOARD                     1                   // Version 0 = Waveshare, Version 1 = And-Global
 
 #if BOARD == 0
   #define MODEM_PWR_ON              HIGH
@@ -82,7 +82,7 @@
 #define AT_NET_1OF "AT+CNACT=1,0"
 
 #define AT_NTP_ID  "AT+CNTPCID=0"                    // ADP Configuration query
-#define AT_NTP_SET "AT+CNTP=\"time.nist.gov\",-24"    // NIST server, Time Zone
+#define AT_NTP_SET "AT+CNTP=\"time.nist.gov\",-20"    // NIST server, Time Zone
 #define AT_NTP_UP  "AT+CNTP"                        // Update the NTP server
 #define AT_TIME    "AT+CCLK?"                       // Dat and Time string query 
 

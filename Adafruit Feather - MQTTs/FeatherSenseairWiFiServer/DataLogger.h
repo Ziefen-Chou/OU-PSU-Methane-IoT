@@ -69,6 +69,7 @@ class DataLogger
     int init();
     int fileDump(int option);
     String fileReadByLine(int option, int startLine, int endLine);
+    String SpefileReadByLine(String FileName, int startLine, int endLine);
     int fileRemove(int option);
     int fileRemove_Specified(int option, String FILE);
     void fileRemoveAll();
@@ -80,6 +81,8 @@ class DataLogger
     
     int fileCount(File dir);
     int fileCount(File dir, String fileName);
+
+    String AppEncrypt(String OriginMessage);  // application-layer encryption
     
     void fileNewName();
     String fileNameString();
