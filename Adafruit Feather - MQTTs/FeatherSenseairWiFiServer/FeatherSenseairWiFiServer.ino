@@ -45,13 +45,14 @@
 #include <Crypto.h>
 #include <AES.h>
 #include <GCM.h>
+#include "BSP_pwm.h"    // Make sure Adafruit ZeroTimer library is installed
 
 #define INTERVAL_DATA_MAX 900000
-#define INTERVAL_DATA_MIN 20000
+#define INTERVAL_DATA_MIN 1000
 #define INTERVAL_FTP_MAX 900000
 #define INTERVAL_FTP_MIN 60000
 #define INTERVAL_CFG_MAX 900000
-#define INTERVAL_CFG_MIN 60000
+#define INTERVAL_CFG_MIN 1000
 #define INTERVAL_BACKUP_MAX 7200000
 #define INTERVAL_BACKUP_MIN 600000
 #define INTERVAL_LOG_MAX 3600000
@@ -69,13 +70,18 @@
 #define MODE_CTRL MODE_CFG_MQTT
 
 #define MAX_LINE_LENGTH 1024
-#define RATIO_FLOW_PUMP 0.5
-#define INTERVAL_PUMP 5000
 
 String dataString = "test_April-2024_#";
 int returnValue = 0;  // Generic integer for catching return values
 String returnString = "";
 
+int timerLastPump =0;
+double ratioFlowPump = 0.5;
+int intervalPump = 10000;
+
+int timerLastReset = 0;                        // Millisecond timer value for last reset
+int intervalReset = 60000;              // Reset the microcontroller every 15 seconds
+//int intervalReset = 43200000;            // Reset the microcontroller every 12 hours
 int intervalData = 5000;  // Read data from sensor and GPS every 5 seconds
 int timerLastRead = 0;    // Millisecond timer value for last data read
 int numCollect = 0;
@@ -84,7 +90,7 @@ int intervalFile = DEVICE_ENABLED;  // Status variable to enable/disable code op
 
 int intervalUpdate = 0;     // Write most recent data to FTP server every 3 minutes
 int timerLastDataFile = 0;  // Millisecond timer value for last data upload
-int countLastDataFile = 0;
+int countLastDataFile = -1;
 
 int intervalCfg = 5000;  // Read timing configuration by FTP every 3 minutes
 int timerLastCfg = 0;
@@ -160,15 +166,17 @@ void setup() {
     if (statusSD == 0) {
       Serial.println("Initialized");
       logger.fileRemove(1);
-      logger.logNewName();
+      logger.logNewName(countLastDataFile);
       logger.fileAddCSV("**********************************************", 2);
       logger.fileAddCSV(SW_VER_NUM, 2);
 
       // Check for settings file on SD
       if (!readStatus()) {
         logger.fileAddCSV(("Default Settings: " + settingsString()), FILE_TYPE_LOG);
+        Serial.println("read config from default file");
         writeStatus();
       } else {
+        Serial.println("read config from status file");
         logger.fileAddCSV(("SD Card Settings: " + settingsString()), FILE_TYPE_LOG);
       }
 
@@ -221,7 +229,12 @@ void setup() {
 
   // Create a data acquisition file based on the date
   if (statusSD >= 0) {
-    logger.fileNewName();
+    countLastDataFile++;
+    if (countLastDataFile>13){
+      countLastDataFile=0;
+    }
+    logger.fileNewName(countLastDataFile);
+    writeStatus();
     modem.readClock(0, returnString);
     logger.fileAddCSV((returnString + ": Data acquisition file = " + logger.fileNameString()), FILE_TYPE_LOG);
   }
@@ -252,13 +265,20 @@ void setup() {
       }
     }
   }
-
+  /* Device 5 and 6: PWM for system pump and system fan */
+  // PWMInit();
+  // PWMSet(POWER_FAN, 100);
+  // PWMSet(POWER_PUMP, 100);
   /* Device 5 and 6: System pump and system fan */
   if (powerFan) {
-    control.enablePower(POWER_FAN);
+    control.enablePower(0);
+  }else{
+    control.disablePower(0);
   }
   if (powerPump) {
-    control.enablePower(POWER_PUMP);
+    control.enablePower(1);
+  }else{
+    control.disablePower(1);
   }
 }
 
@@ -335,7 +355,7 @@ void loop() {
     //********************************************************************************
     // SD Card commands
     else if (serialCommand == "filenew") {
-      logger.fileNewName();
+      logger.fileNewName(countLastDataFile);
     } else if (serialCommand == "filesize") {
       Serial.println(logger.fileCheckSize());
     } else if (serialCommand == "fileadd") {
@@ -702,21 +722,52 @@ void loop() {
     // }
   }
 
-  /*
- * Data processing loop - create comma separated value string
- * 
- * 1 - Date
- * 2 - Time
- * 3 - CH4 concentration
- * 4 - CO2 concentration
- * 5 - H2O concentration
- */
-
-
-
+ 
+    //code to control the pump and it is on/off timing
+    //still in development
+    // if (intervalPump && (millis() - timerLastPump) > intervalPump) {
+    //     timerLastPump = millis();
+        
+    //     // Calculate on and off durations based on ratioFlowPump
+    //     unsigned long onDuration = intervalPump * ratioFlowPump;
+    //     unsigned long offDuration = intervalPump - onDuration;
+    //     Serial.print("on duration is ");
+    //     Serial.println(onDuration);
+    //     Serial.print("off duration is ");
+    //     Serial.println(offDuration);
+    //     if (ratioFlowPump == 0) {
+    //         // Shuts the pump fully
+    //         control.disablePower(1);
+    //         powerPump = false;
+    //     } else if (ratioFlowPump == 1) {
+    //         // Keeps the pump always on
+    //         control.enablePower(1);
+    //         powerPump = true;
+    //     } else {
+    //         // Toggle the pump state based on the current state
+    //         if (powerPump) {
+    //             // Pump is currently on, turn it off
+    //             control.disablePower(1);
+    //             timerLastPump = millis() - onDuration;  // Adjust timer to account for off duration
+    //             powerPump = false;
+    //         } else {
+    //             // Pump is currently off, turn it on
+    //             control.enablePower(1);
+    //             timerLastPump = millis() - offDuration;  // Adjust timer to account for on duration
+    //             powerPump = true;
+    //         }
+    //     }
+    // }
     // // Serial.print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~Test-Remote Control by MQTT~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
+    if ((millis()-timerLastReset) > intervalReset){
+      timerLastReset = millis();
+      Serial.println("Modem reset");
+      NVIC_SystemReset();
+      delay(5000);
+    }
     if (intervalCfg && (millis()-timerLastCfg) > intervalCfg){
           // MQTT publish data and receive commands
+          timerLastCfg = millis();
           Serial.println("Try to subscribe mqtt data\n");
           modem.startMQTT(0); 
           modem.mqttConnect(); 
@@ -724,12 +775,14 @@ void loop() {
           delay(10000);
           modem.mqttDisconnect(); 
           // String command = "intervalData=1000 ;intervalMQTT= 200 ;intervalCfg=3;intervalLog=50;intervalBackup=60;";
-          if (returnValue==0){
-            // change the configuration file
-            replaceConfig(returnString);
-            
+
+          int stats = updateConfig(returnString);
+          if (stats == 1){
+            writeStatus();
+            Serial.println("status.txt has been rewritten");
+          }else if(stats==-2){
+            Serial.print("boolshit");
           }
-          parseCommand(returnString);
           // // Output the results
           Serial.print("intervalData = ");
           Serial.println(intervalData);
@@ -747,6 +800,16 @@ void loop() {
           Serial.println(powerPump);
     }
     // end Test-Remote Control by MQTT
+
+    /*
+    * Data processing loop - create comma separated value string
+    * 
+    * 1 - Date
+    * 2 - Time
+    * 3 - CH4 concentration
+    * 4 - CO2 concentration
+    * 5 - H2O concentration
+    */
     if ((millis()-timerLastRead) > intervalData){
       numCollect = numCollect + 1;
       timerLastRead = millis();
@@ -795,7 +858,7 @@ void loop() {
     }
 
     // send data to mqtt server
-    if (numCollect==60){
+    if (numCollect==10){
       numCollect = 0;
       Serial.println(modem.enableIP());
         statusModem = modem.init();
@@ -821,21 +884,21 @@ void loop() {
         modem.startMQTT(3);
         modem.mqttConnect();
         delay(1000);
-        if (end_line == MaxLineNum){
-          init_line = 1;
-          end_line = 10;
-        }
+        // if (end_line == MaxLineNum){
+        //   init_line = 1;
+        //   end_line = 10;
+        // }
         Serial.print("Start to transmit data");
-        for(int i=0; i<6;i++){
+        for(int i=0; i<1;i++){
           String TransData = logger.fileReadByLine(FILE_TYPE_DATA, init_line, end_line);
           returnValue = modem.mqttWrite(TransData, 1);
           init_line += 10;
           end_line += 10;
           delay(9000);
         }
-        if (end_line == MaxLineNum){
-          logger.fileNewName();
-        }
+        // if (end_line == MaxLineNum){
+        //   logger.fileNewName();
+        // }
         currentFile;
         // modem.powerToggle();
         //  delete now file
@@ -873,7 +936,9 @@ int updateConfig(String json) {
     String result = json.substring(found + 13, json.indexOf(";", found + 13));
     num = result.toInt();
     if (num != intervalData) {
-      if (num && num > INTERVAL_DATA_MAX && num < INTERVAL_DATA_MIN) return -2;
+      if (num && (num > INTERVAL_DATA_MAX || num <= INTERVAL_DATA_MIN)){
+        return -2;
+      } 
       intervalData = num;
       change = 1;
     }
@@ -883,7 +948,7 @@ int updateConfig(String json) {
     String result = json.substring(found + 12, json.indexOf(";", found + 12));
     num = result.toInt();
     if (num != intervalUpdate) {
-      if (num && num > INTERVAL_FTP_MAX && num < INTERVAL_FTP_MIN) return -2;
+      if (num && (num > INTERVAL_FTP_MAX && num <= INTERVAL_FTP_MIN)) return -2;
       intervalUpdate = num;
       change = 1;
     }
@@ -893,7 +958,7 @@ int updateConfig(String json) {
     String result = json.substring(found + 12, json.indexOf(";", found + 12));
     num = result.toInt();
     if (num != intervalCfg) {
-      if (num && num > INTERVAL_CFG_MAX && num < INTERVAL_CFG_MIN) return -2;
+      if (num && (num > INTERVAL_CFG_MAX || num <= INTERVAL_CFG_MIN)) return -2;
       intervalCfg = num;
       change = 1;
     }
@@ -903,7 +968,7 @@ int updateConfig(String json) {
     String result = json.substring(found + 12, json.indexOf(";", found + 12));
     num = result.toInt();
     if (num != intervalLog) {
-      if (num && num > INTERVAL_LOG_MAX && num < INTERVAL_LOG_MIN) return -2;
+      if (num && (num > INTERVAL_LOG_MAX || num < INTERVAL_LOG_MIN)) return -2;
       intervalLog = num;
       change = 1;
     }
@@ -915,6 +980,38 @@ int updateConfig(String json) {
     if (num != intervalBackup) {
       if (num > INTERVAL_BACKUP_MAX && num < INTERVAL_BACKUP_MIN) return -2;
       intervalBackup = num;
+      change = 1;
+    }
+  }
+  found = json.indexOf("powerFan=");
+  if (found >= 0) {
+    String result = json.substring(found + 9, json.indexOf(";", found + 9));
+    num = result.toInt();
+    if (num==1 && !powerFan){
+      powerFan = true;
+      //PWMSet(POWER_FAN, 50);
+      control.enablePower(0);
+      change = 1;
+    }else if (num==0 && powerFan){
+      powerFan= false;
+      //PWMSet(POWER_FAN, 0);
+      control.disablePower(0);
+      change = 1;
+    }
+  }
+  found = json.indexOf("powerPump=");
+  if (found >= 0) {
+    String result = json.substring(found + 10, json.indexOf(";", found + 10));
+    num = result.toInt();
+    if (num==1 && !powerPump){
+      powerPump = true;
+      //PWMSet(POWER_PUMP, 50);
+      control.enablePower(1);
+      change = 1;
+    }else if (num==0 && powerPump){
+      powerPump= false;
+      //PWMSet(POWER_PUMP, 0);
+      control.disablePower(1);
       change = 1;
     }
     return change;
@@ -936,21 +1033,22 @@ int readStatus() {
   File statusFile = logger.fileOpen(FILE_TYPE_LOG);
 
   while (statusFile.available()) {
-    Serial.print(String(statusFile.read()));
+    Serial.print((char)statusFile.read());
     //json.concat(statusFile.read());
   }
   statusFile = logger.fileOpen(FILE_TYPE_STATUS);
-
-  while (statusFile.available()) {
-    Serial.print(statusFile.read());
-    //json.concat(statusFile.read());
+  if (!statusFile) {
+    Serial.println("Error opening file");
+    return -1;
   }
-
+  while (statusFile.available()) {
+    //Serial.print(statusFile.read());
+    json.concat((char)statusFile.read());
+  }
   int found = json.indexOf(STATUS_TAG_FILE);
   String result = json.substring(found + 14, json.indexOf(";", found + 14));
   countLastDataFile = result.toInt();
   statusFile.close();
-
   Serial.println(json);
 
   return updateConfig(json);
@@ -968,145 +1066,88 @@ int writeStatus() {
  */
 
 String settingsString() {
-  return "intervalData=" + String(intervalData) + ";intervalFTP=" + String(intervalUpdate) + ";intervalCfg=" + String(intervalCfg) + ";intervalLog=" + String(intervalLog) + ";intervalBackup=" + String(intervalBackup);
+  return "intervalData=" + String(intervalData) + ";intervalFTP=" + String(intervalUpdate) + ";intervalCfg=" + String(intervalCfg) + ";intervalLog=" + String(intervalLog) + ";intervalBackup=" + String(intervalBackup) + ";powerFan=" + String(powerFan) + ";powerPump=" + String(powerPump);
 }
 
-/*
- * Function to parse the configuration command
- */
-void readConfig() {
-    // Open the file in write mode to replace its contents
-    FILE *file = fopen("status.txt", "r");
-    if (file == NULL) {
-        perror("Error opening file");
-        return;
-    }
-    char line[MAX_LINE_LENGTH];
 
-    if (fgets(line, MAX_LINE_LENGTH, file) != NULL) {
-    char *token = strtok(line, ";");
-    while (token != NULL) {
-        char key[64];
-        int value;
-        if (sscanf(token, "%[^=]=%d", key, &value) == 2) {
-            if (strcmp(key, "intervalData") == 0) {
-                intervalData = value;
-            } else if (strcmp(key, "intervalUpdate") == 0) {
-                intervalUpdate = value;
-            } else if (strcmp(key, "intervalCfg") == 0) {
-                intervalCfg = value;
-            } else if (strcmp(key, "intervalLog") == 0) {
-                intervalLog = value;
-            } else if (strcmp(key, "intervalBackup") == 0) {
-                intervalBackup = value;
-            }else if (strcmp(key, "intervalBackup") == 0) {
-                intervalBackup = value;
-            }
-        }
-        token = strtok(NULL, ";");
-      }
-    }
-
-  
-    // Close the file
-    fclose(file);
-}
-void replaceConfig(String &newContent) {
-    // Open the file in write mode to replace its contents
-    FILE *file = fopen("config.txt", "w");
-    if (file == NULL) {
-        perror("Error opening file");
-        return;
-    }
-
-    // Write the new content to the file
-    fprintf(file, "%s", newContent.c_str());
-
-    // Close the file
-    fclose(file);
-}
-void parseCommand(String command) {
-    // Map keys to variable addresses
-    struct Config {
-        const char* key;
-        void* variable;
-        bool isBool; // Indicate whether the variable is a boolean
-    };
+// void parseCommand(String command) {
+//     // Map keys to variable addresses
+//     struct Config {
+//         const char* key;
+//         void* variable;
+//         bool isBool; // Indicate whether the variable is a boolean
+//     };
     
-    extern int intervalData;     // Ensure these variables are declared elsewhere
-    extern int intervalUpdate;
-    extern int intervalCfg;
-    extern int intervalLog;
-    extern int intervalBackup;
-    extern bool powerPump;
-    extern bool powerFan;
+//     extern int intervalData;     // Ensure these variables are declared elsewhere
+//     extern int intervalUpdate;
+//     extern int intervalCfg;
+//     extern int intervalLog;
+//     extern int intervalBackup;
+//     extern bool powerPump;
+//     extern bool powerFan;
 
-    Config configMap[] = {
-        {"intervalData", &intervalData, false},
-        {"intervalUpdate", &intervalUpdate, false},
-        {"intervalCfg", &intervalCfg, false},
-        {"intervalLog", &intervalLog, false},
-        {"intervalBackup", &intervalBackup, false},
-        {"powerFan", &powerFan, true},
-        {"powerPump", &powerPump, true},
-    };
+//     Config configMap[] = {
+//         {"intervalData", &intervalData, false},
+//         {"intervalUpdate", &intervalUpdate, false},
+//         {"intervalCfg", &intervalCfg, false},
+//         {"intervalLog", &intervalLog, false},
+//         {"intervalBackup", &intervalBackup, false},
+//         {"powerFan", &powerFan, true},
+//         {"powerPump", &powerPump, true},
+//     };
     
-    const int configMapSize = sizeof(configMap) / sizeof(Config);
+//     const int configMapSize = sizeof(configMap) / sizeof(Config);
 
-    // Split the command by semicolons
-    int start = 0;
-    while (start < command.length()) {
-        int end = command.indexOf(';', start);
-        if (end == -1) {
-            end = command.length();
-        }
+//     // Split the command by semicolons
+//     int start = 0;
+//     while (start < command.length()) {
+//         int end = command.indexOf(';', start);
+//         if (end == -1) {
+//             end = command.length();
+//         }
         
-        String item = command.substring(start, end);
-        start = end + 1;
+//         String item = command.substring(start, end);
+//         start = end + 1;
 
-        // Split each item by the equals sign
-        int pos = item.indexOf('=');
-        if (pos != -1) {
-            String key = item.substring(0, pos);
-            key.trim(); // Correct usage of trim
+//         // Split each item by the equals sign
+//         int pos = item.indexOf('=');
+//         if (pos != -1) {
+//             String key = item.substring(0, pos);
+//             key.trim(); // Correct usage of trim
 
-            String valueStr = item.substring(pos + 1);
-            valueStr.trim(); // Correct usage of trim
+//             String valueStr = item.substring(pos + 1);
+//             valueStr.trim(); // Correct usage of trim
 
-            for (int i = 0; i < configMapSize; i++) {
-                if (key == configMap[i].key) {
-                    if (configMap[i].isBool) {
-                        bool value = (valueStr == "true" || valueStr == "1");
-                        *((bool*)configMap[i].variable) = value;
+//             for (int i = 0; i < configMapSize; i++) {
+//                 if (key == configMap[i].key) {
+//                     if (configMap[i].isBool) {
+//                         bool value = (valueStr == "true" || valueStr == "1");
+//                         *((bool*)configMap[i].variable) = value;
                         
-                        // Control power based on the value
-                        if (key == "powerFan") {
-                            if (value) {
-                              Serial.println(value);
-                              control.enablePower(0);
-                            } else {
-                              Serial.println(value);
-                              control.disablePower(0);
-                            }
-                        } else if (key == "powerPump") {
+//                         // Control power based on the value
+//                         if (key == "powerFan") {
+//                             if (value) {
+//                               control.enablePower(0);
+//                             } else {
+//                               control.disablePower(0);
+//                             }
+//                         } else if (key == "powerPump") {
                           
-                            if (value) {
-                              Serial.println(value);
-                              control.enablePower(1);
-                            } else {
-                              Serial.println(value);
-                              control.disablePower(1);
-                            }
-                        }
-                    } else {
-                        int value = valueStr.toInt();
-                        *((int*)configMap[i].variable) = value;
-                    }
-                    break;
-                }
-            }
-        }
-    }
-}
+//                             if (value) {
+//                               control.enablePower(1);
+//                             } else {
+//                               control.disablePower(1);
+//                             }
+//                         }
+//                     } else {
+//                         int value = valueStr.toInt();
+//                         *((int*)configMap[i].variable) = value;
+//                     }
+//                     break;
+//                 }
+//             }
+//         }
+//     }
+// }
 
 
