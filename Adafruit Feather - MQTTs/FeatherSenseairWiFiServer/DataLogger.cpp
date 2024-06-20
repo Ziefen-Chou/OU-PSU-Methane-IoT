@@ -299,18 +299,25 @@ int DataLogger::fileCount(File dir, String fileName) {
  *  File names are limited to 8 characters: dXXXXXXX.csv
  *  X is the file number 0000000 - 9999999
  */
-void DataLogger::fileNewName() {
+void DataLogger::fileNewName(int countLastDataFile) {
   // open the file. note that only one file can be open at a time,
   // so you have to close this one before opening another.
-  if (dataFileCount >= 0) {
-    fileName = DATA_FILE_NAME + String(dataFileCount) + ".csv";
-  } else {
-    fileName = String(DATA_FILE_NAME) + "x.csv";
-  }
-
+  // if (dataFileCount >= 0) {
+  //   fileName = DATA_FILE_NAME + String(dataFileCount) + ".csv";
+  // } else {
+  //   fileName = String(DATA_FILE_NAME) + "x.csv";
+  // }
+  Serial.println("new file name index to use is");
+  Serial.println(countLastDataFile);
+  fileName = DATA_FILE_NAME + String(countLastDataFile) + ".csv";
   while (SD.exists(fileName)) {
-    dataFileCount++;
-    fileName = DATA_FILE_NAME + String(dataFileCount) + ".csv";
+    if (SD.remove(fileName)) {
+            Serial.print("d");
+            Serial.print(countLastDataFile);
+            Serial.println(" File deleted successfully.");
+        } else {
+            Serial.println("Error deleting file.");
+        }
   }
 }
 
@@ -327,12 +334,22 @@ String DataLogger::fileNameString() {
  *  File names are limited to 8 characters: YYMMDD_x.csv
  *  x (maximum 62) = 0-9,A-Z,a-z
  */
-void DataLogger::logNewName() {
+void DataLogger::logNewName(int countLastDataFile) {
   // open the file. note that only one file can be open at a time,
   // so you have to close this one before opening another.
   File root;
   root = SD.open("/");
-  logName = LOG_FILE_NAME + String(logFileCount) + ".txt";
+  logName = LOG_FILE_NAME + String(countLastDataFile) + ".txt";
+  while (SD.exists(logName)) {
+    if (SD.remove(logName)) {
+            Serial.print("l");
+            Serial.print(countLastDataFile);
+            Serial.println(" File deleted successfully.");
+        } else {
+            Serial.println("Error deleting file.");
+        }
+  }
+  
   root.close();
 }
 
@@ -468,7 +485,7 @@ String DataLogger::fileReadByLine(int option, int startLine, int endLine) {
   }
 }
 
-
+// PSU
 String DataLogger::SpefileReadByLine(String FileName, int startLine, int endLine) {
   if (!status) {
     String temp = FileName;

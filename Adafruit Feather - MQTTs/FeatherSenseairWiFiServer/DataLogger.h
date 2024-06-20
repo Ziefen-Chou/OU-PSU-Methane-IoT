@@ -25,7 +25,7 @@
 
 #define SD_CS             4
 #define TEMP_DATA         "d0000000.csv"
-#define STATUS_DATA       "status.txt"
+#define STATUS_DATA       "STATUS.txt"
 #define STATUS_TAG_FILE   "lastFileIndex="
 #define STATUS_TAG_TEST   "lastTestIndex="
 #define FILE_MAX_SIZE     32000 
@@ -33,6 +33,7 @@
 
 #define LOG_FILE_NAME     "L"
 #define DATA_FILE_NAME    "D"
+
 
 #define CRT_FILE_NAME    "client.crt"
 #define PEM_FILE_NAME    "CA.pem"
@@ -45,6 +46,7 @@
 #define FILE_TYPE_CRT       4
 #define FILE_TYPE_PEM       5
 #define FILE_TYPE_KEY       6
+
 
 #define FILE_REAL           0
 #define FILE_VIRTUAL        1
@@ -84,9 +86,9 @@ class DataLogger
 
     String AppEncrypt(String OriginMessage);  // application-layer encryption
     
-    void fileNewName();
+    void fileNewName(int countLastDataFile);
     String fileNameString();
-    void logNewName();
+    void logNewName(int countLastDataFile);
     File fileOpen(int option);
 
     String fileRead(int option);

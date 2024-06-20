@@ -502,18 +502,19 @@ String SimModem::readIMEI(){
 }
 
 /*
- * Time string is in quotes if available
+ * Time string is in quotes if available "YY/MM/DD,HH:MM:SS-XX"
  * Date occurs before comma ","
  * Date format is YY/MM/DD
+ * Final code is offset from GMT
  */
 int SimModem::readClock(int format, String &clockString){
   if (status == MODEM_STATUS_ON){
-    String dateTimeResponse = readWaitResponse(AT_TIME,100,"CCLK:");
+    String dateTimeResponse = readWaitResponse(AT_TIME,5000,"CCLK:");
+    readWaitResponse("",5000,"OK");
   
-    int startIndex = dateTimeResponse.indexOf("\"");
-    int endIndex = dateTimeResponse.indexOf("\"",startIndex+1);
-    if (format == 0){
-      dateTimeResponse.substring(startIndex+1, dateTimeResponse.indexOf("-",startIndex));
+    int startIndex = dateTimeResponse.indexOf("\"");                                  // Find index of first quotation mark (might not be at start of line)
+    if (format == 0){                                                                 // Remove quotation marks and the GMT offset
+      dateTimeResponse = dateTimeResponse.substring(startIndex+1, dateTimeResponse.indexOf("-",startIndex));
     }
     else if (format == 1){
       dateTimeResponse = dateTimeResponse.substring(startIndex+1, dateTimeResponse.indexOf(",",startIndex));

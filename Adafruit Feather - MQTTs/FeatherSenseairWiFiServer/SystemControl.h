@@ -24,10 +24,10 @@
 #ifndef SystemControl_h
 #define SystemControl_h
 
-#define POWER_SENSOR  A1              // Sensor has it's own exterior enable pin
-#define POWER_GPS     A2              // GPS uses internal buck converter
-#define POWER_FAN     A3              // Cooling fan control
-#define POWER_PUMP    A4              // Gas movement control
+#define POWER_SENSOR  A3              // Sensor has it's own exterior enable pin
+#define POWER_GPS     A4              // GPS uses internal buck converter
+#define POWER_FAN     A1              // Cooling fan control
+#define POWER_PUMP    A2              // Gas movement control
 
 #define AUX_IO        A5              // Open pin should route to exterior connector
 
