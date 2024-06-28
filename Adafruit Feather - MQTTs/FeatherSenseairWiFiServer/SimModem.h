@@ -23,7 +23,7 @@
 #define modemRX                   21
 #define modemTX                   20
 
-#define BOARD                     0                   // Version 0 = Waveshare, Version 1 = And-Global
+#define BOARD                     1                   // Version 0 = Waveshare, Version 1 = And-Global
 
 #if BOARD == 0
   #define MODEM_PWR_ON              HIGH
@@ -82,7 +82,7 @@
 #define AT_NET_1OF "AT+CNACT=1,0"
 
 #define AT_NTP_ID  "AT+CNTPCID=0"                    // ADP Configuration query
-#define AT_NTP_SET "AT+CNTP=\"time.nist.gov\",-24"    // NIST server, Time Zone
+#define AT_NTP_SET "AT+CNTP=\"time.nist.gov\",-20"    // NIST server, Time Zone
 #define AT_NTP_UP  "AT+CNTP"                        // Update the NTP server
 #define AT_TIME    "AT+CCLK?"                       // Dat and Time string query 
 
@@ -154,20 +154,21 @@
 // #define AT_MQT_CLI          "AT+SMCONF=\"CLIENTID\",\"aimnet002\""
 #define AT_MQT_CLI          "AT+SMCONF=\"CLIENTID\",\"psueeiot\""
 #define AT_MQT_TOP          "AT+SMCONF=\"TOPIC\",\"psu0125\""
-#define AT_MQT_TOP_STAB     "AT+SMCONF=\"TOPIC\",\"psutest/stability\""
+#define AT_MQT_TOP_STAB     "AT+SMCONF=\"TOPIC\",\"aimnet/007/data\""
 #define AT_MQT_TOP_AppEncry     "AT+SMCONF=\"TOPIC\",\"psutest/AppEncryt\""
 #define AT_MQT_CON          "AT+SMCONN"
 
-#define AT_MQT_SUB          "AT+SMSUB=\"aimnet/002\",1"
-#define AT_MQT_PUB5         "AT+SMPUB=\"aimnet/002\",5,1,1"
-// #define AT_MQT_PUB1         "AT+SMPUB=\"aimnet/002\",1,1,1"
+#define AT_MQT_SUB          "AT+SMSUB=\"aimnet/007/log\",1"
+#define AT_MQT_PUB5         "AT+SMPUB=\"aimnet/007/log\",5,1,1"
+// #define AT_MQT_PUB1         "AT+SMPUB=\"aimnet/007/log\",1,1,1"
 #define AT_MQT_PUB1         "AT+SMPUB=\"psutest/AppEncry\",1,1,1"
 
-// #define AT_MQT_PUBX         "AT+SMPUB=\"aimnet/002\","
+// #define AT_MQT_PUBX         "AT+SMPUB=\"aimnet/007/log\","
 // #define AT_MQT_PUBX         "AT+SMPUB=\"psutest/AppEncryt\","
-#define AT_MQT_PUBX         "AT+SMPUB=\"psutest/stability\","
+#define AT_MQT_PUBX         "AT+SMPUB=\"aimnet/007/data\","
+#define AT_MQT_PUBX2         "AT+SMPUB=\"aimnet/xxx/log/response\","  
 #define AT_MQT_PUBY         ",1,1"
-#define AT_MQT_UNS        "AT+SMUNSUB=\"aimnet/002\""
+#define AT_MQT_UNS        "AT+SMUNSUB=\"aimnet/007/log\""
 #define AT_MQT_DIS        "AT+SMDISC"
 #define AT_MQT_STA        "AT+SMSTATE?"
 #define AT_MQT_CFG        "AT+SMCONF?"
@@ -282,6 +283,7 @@ public:
   // High level read-write commands that include configuration and reset commands
   int mqttRead(String &message, int option);
   int mqttWrite(String &message, int option);
+  int callback(String message);
 
   int sslFileDownload(int option);
   int sslFileDownload(File dataFile, int option);

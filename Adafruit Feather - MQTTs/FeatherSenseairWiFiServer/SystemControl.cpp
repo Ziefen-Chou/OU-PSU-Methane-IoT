@@ -47,16 +47,16 @@ SystemControl::SystemControl()
 int SystemControl::enablePower(int option)
 {
   if (option == 0){
-    digitalWrite(POWER_SENSOR, HIGH);
-  }
-  else if (option == 1){
-    digitalWrite(POWER_GPS, HIGH);
-  }
-  else if (option == 2){
     digitalWrite(POWER_FAN, HIGH);
   }
-  else if (option == 3){
+  else if (option == 1){
     digitalWrite(POWER_PUMP, HIGH);
+  }
+  else if (option == 2){
+    digitalWrite(POWER_SENSOR, HIGH);
+  }
+  else if (option == 3){
+    digitalWrite(POWER_GPS, HIGH);
   }
   else{
     return -1;
@@ -72,16 +72,16 @@ int SystemControl::enablePower(int option)
 int SystemControl::disablePower(int option)
 {
   if (option == 0){
-    digitalWrite(POWER_SENSOR, LOW);
-  }
-  else if (option == 1){
-    digitalWrite(POWER_GPS, LOW);
-  }
-  else if (option == 2){
     digitalWrite(POWER_FAN, LOW);
   }
-  else if (option == 3){
+  else if (option == 1){
     digitalWrite(POWER_PUMP, LOW);
+  }
+  else if (option == 2){
+    digitalWrite(POWER_SENSOR, LOW);
+  }
+  else if (option == 3){
+    digitalWrite(POWER_GPS, LOW);
   }
   else{
     status -1;
